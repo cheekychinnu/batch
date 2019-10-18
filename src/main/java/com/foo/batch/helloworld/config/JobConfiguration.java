@@ -1,4 +1,4 @@
-package com.foo.batch.config;
+package com.foo.batch.helloworld.config;
 
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -22,7 +22,6 @@ public class JobConfiguration {
 
     @Autowired
     private StepBuilderFactory stepBuilderFactory;
-
 
     @Bean
     public Step step1() {

@@ -1,4 +1,4 @@
-package com.foo.batch;
+package com.foo.batch.helloworld;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
