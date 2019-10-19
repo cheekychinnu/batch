@@ -1,4 +1,4 @@
-package com.foo.batch.reader.config;
+package com.foo.batch.statelessreader.config;
 
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;

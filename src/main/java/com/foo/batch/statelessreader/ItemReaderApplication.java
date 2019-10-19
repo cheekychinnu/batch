@@ -1,4 +1,4 @@
-package com.foo.batch.reader;
+package com.foo.batch.statelessreader;
 
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.boot.SpringApplication;
