@@ -6,14 +6,17 @@ import org.springframework.batch.core.configuration.annotation.JobBuilderFactory
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.MultiResourceItemReader;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.mapping.FieldSetMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.batch.item.file.transform.FieldSet;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.validation.BindException;
 
 import java.util.List;
@@ -36,6 +39,18 @@ public class JobConfiguration {
             fieldSet.readString("lastName"));
         }
     }
+
+    @Value("classpath:/data/customers*.csv")
+    private Resource[] resources;
+
+    @Bean
+    public MultiResourceItemReader<Customer> multiResourceItemReader() {
+        MultiResourceItemReader<Customer> reader = new MultiResourceItemReader<>();
+        reader.setDelegate(customerFlatFileItemReader());
+        reader.setResources(resources);
+        return reader;
+    }
+
     @Bean
     public FlatFileItemReader<Customer> customerFlatFileItemReader() {
         FlatFileItemReader<Customer> reader = new FlatFileItemReader<>();
@@ -63,7 +78,8 @@ public class JobConfiguration {
     public Step step1() {
         return stepBuilderFactory.get("step1")
                 .<Customer, Customer>chunk(3)
-                .reader(customerFlatFileItemReader())
+//                .reader(customerFlatFileItemReader())
+                .reader(multiResourceItemReader())
                 .writer(customerItemWriter())
                 .build();
     }

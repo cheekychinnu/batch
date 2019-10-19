@@ -1,6 +1,9 @@
 package com.foo.batch.flatfilereader.config;
 
-public class Customer {
+import org.springframework.batch.item.ResourceAware;
+import org.springframework.core.io.Resource;
+
+public class Customer implements ResourceAware {
     private String id;
     private String firstName;
     private String lastName;
@@ -41,6 +44,14 @@ public class Customer {
                 "id='" + id + '\'' +
                 ", firstName='" + firstName + '\'' +
                 ", lastName='" + lastName + '\'' +
+                ", resouce='"+resource+"'"+
                 '}';
+    }
+
+    private Resource resource;
+
+    @Override
+    public void setResource(Resource resource) {
+        this.resource = resource;
     }
 }
