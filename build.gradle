@@ -16,6 +16,8 @@ repositories {
 dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
     implementation 'org.springframework.boot:spring-boot-starter-batch'
+    // added for job orchestration
+    implementation 'org.springframework.boot:spring-boot-starter-web'
     // ********** This is to choose a jdbc based job repository
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.batch:spring-batch-integration'
