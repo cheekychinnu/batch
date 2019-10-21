@@ -16,14 +16,16 @@ import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.scope.context.ChunkContext;
 import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class JobConfiguration {
+public class JobConfiguration implements ApplicationContextAware {
 
     @Autowired
     private JobBuilderFactory jobBuilderFactory;
@@ -43,7 +45,6 @@ public class JobConfiguration {
     @Autowired
     private JobExplorer jobExplorer;
 
-    @Autowired
     private ApplicationContext applicationContext;
 
     @Bean // to register the job into the registry
@@ -90,5 +91,10 @@ public class JobConfiguration {
                                 .build())
                 .build();
 
+    }
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.applicationContext = applicationContext;
     }
 }
