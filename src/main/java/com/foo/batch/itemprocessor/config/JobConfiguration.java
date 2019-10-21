@@ -15,6 +15,7 @@ import org.springframework.batch.item.file.mapping.FieldSetMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.batch.item.file.transform.FieldSet;
 import org.springframework.batch.item.file.transform.LineAggregator;
+import org.springframework.batch.item.support.CompositeItemProcessor;
 import org.springframework.batch.item.validator.ValidatingItemProcessor;
 import org.springframework.batch.item.validator.ValidationException;
 import org.springframework.batch.item.validator.Validator;
@@ -25,6 +26,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.validation.BindException;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Configuration
 public class JobConfiguration {
@@ -109,19 +113,46 @@ public class JobConfiguration {
     }
 
     @Bean
+    public CompositeItemProcessor<Customer,Customer> customerCompositeItemProcessor() throws Exception {
+        List<ItemProcessor<Customer,Customer>> processors = new ArrayList<>();
+        processors.add(upperCaseItemProcessor());
+        processors.add(customerValidatingItemProcessor());
+
+        CompositeItemProcessor<Customer, Customer> compositeItemProcessor = new CompositeItemProcessor<>();
+        compositeItemProcessor.setDelegates(processors);
+        compositeItemProcessor.afterPropertiesSet();
+        return compositeItemProcessor;
+    }
+
+    @Bean
     public ItemWriter<Customer> customerItemWriter() {
         return items -> items.forEach(System.out::println);
     }
 
     @Bean
     public Step step1() throws Exception {
+        // using simple processor
+        /*return stepBuilderFactory.get("step1")
+                .<Customer, Customer>chunk(3)
+                .reader(customerFlatFileItemReader())
+                .processor(upperCaseItemProcessor())
+                .writer(customerItemWriter())
+                .build();*/
 
-        // this is using simple flat file reader
+        // using validating processors
+        /*return stepBuilderFactory.get("step1")
+                .<Customer, Customer>chunk(3)
+                .reader(customerFlatFileItemReader())
+
+                .processor(customerValidatingItemProcessor())
+                .writer(customerItemWriter())
+                .build();*/
+
+        // using composite
         return stepBuilderFactory.get("step1")
                 .<Customer, Customer>chunk(3)
                 .reader(customerFlatFileItemReader())
-//                .processor(upperCaseItemProcessor())
-                .processor(customerValidatingItemProcessor())
+                .processor(customerCompositeItemProcessor())
                 .writer(customerItemWriter())
                 .build();
     }
