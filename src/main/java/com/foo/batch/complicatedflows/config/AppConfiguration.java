@@ -107,6 +107,7 @@ public class AppConfiguration {
                                         s -> s.getExitStatus().getExitCode().equals(ExitStatus.FAILED.getExitCode())
                                 );
                         if(subJobsFailed) {
+                            stepExecution.setStatus(BatchStatus.FAILED);
                             stepExecution.setExitStatus(ExitStatus.FAILED);
                             return ExitStatus.FAILED;
                         }
