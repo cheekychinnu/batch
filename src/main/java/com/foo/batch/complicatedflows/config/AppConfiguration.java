@@ -1,7 +1,6 @@
 package com.foo.batch.complicatedflows.config;
 
-import org.springframework.batch.core.Job;
-import org.springframework.batch.core.Step;
+import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.job.builder.FlowBuilder;
@@ -50,13 +49,25 @@ public class AppConfiguration {
         return jobBuilderFactory.get("trade-job")
                 .start(stepBuilderFactory.get("trade-etl")
                         .tasklet((contribution, chunkContext) -> {
+                            boolean fail = true;
+                            if (chunkContext.getStepContext().getStepExecutionContext().containsKey("restart")) {
+                                fail = false;
+                            } else {
+                                chunkContext.getStepContext().getStepExecution().getExecutionContext()
+                                        .put("restart", true);
+                            }
+
+                            if (fail) {
+                                throw new RuntimeException("Intentional exception");
+                            }
                             Random random = new Random();
                             int duration = random.nextInt(6000);
                             System.out.println(Thread.currentThread().getName() + " Executing trade reader. Going to sleep for " + duration);
                             TimeUnit.MILLISECONDS.sleep(duration);
                             System.out.println(Thread.currentThread().getName() + " Executing trade reader. Finished");
                             return RepeatStatus.FINISHED;
-                        }).build()).build();
+                        }).build())
+                .build();
     }
 
     @Bean
@@ -70,16 +81,39 @@ public class AppConfiguration {
                             TimeUnit.MILLISECONDS.sleep(duration);
                             System.out.println(Thread.currentThread().getName() + " Executing pricing reader. Finished");
                             return RepeatStatus.FINISHED;
-                        }).build()).build();
+                        }).build())
+                .build();
     }
 
     @Bean
     public Step finalStep() {
         return stepBuilderFactory.get("final-send")
                 .tasklet((contribution, chunkContext) -> {
-                    System.out.println(Thread.currentThread().getName() + " Final");
+                    System.out.println(Thread.currentThread().getName() + " Final" +
+                            chunkContext.getStepContext()
+                    .getStepExecution().getJobExecution().getStepExecutions());
                     return RepeatStatus.FINISHED;
-                }).build();
+                })
+                .listener(new StepExecutionListener() {
+                    @Override
+                    public void beforeStep(StepExecution stepExecution) {
+
+                    }
+
+                    @Override
+                    public ExitStatus afterStep(StepExecution stepExecution) {
+                        boolean subJobsFailed = stepExecution.getJobExecution()
+                                .getStepExecutions().stream().anyMatch(
+                                        s -> s.getExitStatus().getExitCode().equals(ExitStatus.FAILED.getExitCode())
+                                );
+                        if(subJobsFailed) {
+                            stepExecution.setExitStatus(ExitStatus.FAILED);
+                            return ExitStatus.FAILED;
+                        }
+                        return stepExecution.getExitStatus();
+                    }
+                })
+                .build();
     }
 
     @Bean
@@ -125,7 +159,8 @@ public class AppConfiguration {
 
         return jobBuilderFactory.get("data-sync")
                 .start(etlFlow)
-                .next(finalStep())
+                .on("*")
+                .to(finalStep())
                 .end().build();
     }
 }
