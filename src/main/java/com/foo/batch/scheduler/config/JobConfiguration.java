@@ -1,4 +1,4 @@
-package com.foo.batch.joborchestrationstop.config;
+package com.foo.batch.scheduler.config;
 
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.StepContribution;
@@ -12,6 +12,7 @@ import org.springframework.batch.core.converter.DefaultJobParametersConverter;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.JobOperator;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.launch.support.SimpleJobLauncher;
 import org.springframework.batch.core.launch.support.SimpleJobOperator;
 import org.springframework.batch.core.repository.JobRepository;
@@ -84,8 +85,6 @@ public class JobConfiguration extends DefaultBatchConfigurer implements Applicat
         return new Tasklet() {
             @Override
             public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-                System.out.println("Job sleeping for " + name);
-                Thread.sleep(100);
                 return RepeatStatus.CONTINUABLE;
             }
         };
@@ -94,9 +93,10 @@ public class JobConfiguration extends DefaultBatchConfigurer implements Applicat
     @Bean
     public Job job(){
         return jobBuilderFactory.get("job")
+                .incrementer(new RunIdIncrementer())
                 .start(stepBuilderFactory.get("step1")
-                .tasklet(tasklet(null))
-                .build()).build();
+                        .tasklet(tasklet(null))
+                        .build()).build();
     }
 
     @Override
