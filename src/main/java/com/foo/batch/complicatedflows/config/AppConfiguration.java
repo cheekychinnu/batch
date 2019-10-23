@@ -97,7 +97,7 @@ public class AppConfiguration {
                 .listener(new StepExecutionListener() {
                     @Override
                     public void beforeStep(StepExecution stepExecution) {
-
+                        System.out.println(Thread.currentThread().getName() + " BeforeStep of finalStep");
                     }
 
                     @Override
@@ -121,7 +121,7 @@ public class AppConfiguration {
     public Job dataSync(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         Step pricingJobStep = new JobStepBuilder(new StepBuilder("pricingJobStep"))
                 .job(pricingJob())
-                .launcher(jobLauncher)
+//                .launcher(this.jobLauncher)
                 .repository(jobRepository)
                 .transactionManager(transactionManager)
                 .build();
@@ -131,7 +131,7 @@ public class AppConfiguration {
 
         Step referenceJobStep = new JobStepBuilder(new StepBuilder("referenceJobStep"))
                 .job(referenceJob())
-                .launcher(jobLauncher)
+//                .launcher(jobLauncher)
                 .repository(jobRepository)
                 .transactionManager(transactionManager)
                 .build();
@@ -141,7 +141,7 @@ public class AppConfiguration {
         ).build();
         Step tradeJobStep = new JobStepBuilder(new StepBuilder("tradeJobStep"))
                 .job(tradeJob())
-                .launcher(jobLauncher)
+//                .launcher(jobLauncher)
                 .repository(jobRepository)
                 .transactionManager(transactionManager)
                 .build();
@@ -151,16 +151,16 @@ public class AppConfiguration {
         SimpleAsyncTaskExecutor simpleAsyncTaskExecutor = new SimpleAsyncTaskExecutor();
 
         Flow etlFlow = new FlowBuilder<Flow>("etl-flow")
-                .start(pricingFlow)
                 .split(simpleAsyncTaskExecutor)
-                .add(referenceFlow)
-                .split(simpleAsyncTaskExecutor)
-                .add(tradeFlow)
+                .add(pricingFlow, referenceFlow, tradeFlow)
                 .end();
 
         return jobBuilderFactory.get("data-sync")
                 .start(etlFlow)
-                .on("*")
+                .on("COMPLETED")
+                .to(finalStep())
+                .from(etlFlow)
+                .on("FAILED")
                 .to(finalStep())
                 .end().build();
     }
