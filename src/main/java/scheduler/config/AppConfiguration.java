@@ -29,6 +29,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -37,6 +38,7 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 @Configuration
+@Profile("scheduler")
 public class AppConfiguration extends DefaultBatchConfigurer implements ApplicationContextAware {
 
     Random random = new Random();
