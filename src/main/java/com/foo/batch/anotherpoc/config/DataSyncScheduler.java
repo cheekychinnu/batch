@@ -1,8 +1,7 @@
 package com.foo.batch.anotherpoc.config;
 
 
-import com.foo.batch.anotherpoc.dao.SchedulerDao;
-import com.foo.batch.anotherpoc.mapper.EtlJobConfigurationMapper;
+import com.foo.batch.anotherpoc.dao.EtlJobDao;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.*;
@@ -11,7 +10,6 @@ import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteExcep
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.repository.JobRestartException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,6 +18,7 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -31,8 +30,6 @@ public class DataSyncScheduler {
 
     @Autowired
     private JobRepository jobRepository;
-    @Autowired
-    private EtlJobConfigurationMapper etlJobConfigurationMapper;
 
     @Autowired
     private JobOperator jobOperator;
@@ -41,7 +38,7 @@ public class DataSyncScheduler {
     private JobExplorer jobExplorer;
 
     @Autowired
-    private SchedulerDao schedulerDao;
+    private EtlJobDao etlJobDao;
 
     @PostConstruct
     public void cleanUpAbandonedJobs() throws JobParametersInvalidException,
@@ -73,8 +70,8 @@ public class DataSyncScheduler {
     }
 
     @Bean
-    public int getFixedDelayForDataSync() {
-        return schedulerDao.getCronValue();
+    public String getFixedDelayForDataSync() {
+        return etlJobDao.getEtlConfiguration(JOB_NAME).getSchedule();
     }
 
     //    https://stackoverflow.com/questions/24033208/how-to-prevent-overlapping-schedules-in-spring
@@ -89,16 +86,16 @@ public class DataSyncScheduler {
         // if the previous instance just started a job execution. so you might have to do a cleanup during bootstrap
         // to stop all the executions : I have added one cleanup logic here.
         // Hence @DependsOn the job itself. because you cannot restart the job before the job bean is initialized.
-        while (schedulerDao.isLastExecutionAtNonOverrideModeStillRunning(JOB_NAME)) {
+        while (isLastExecutionAtNonOverrideModeStillRunning(JOB_NAME)) {
             System.out.println("Previous execution for job is still running.. waiting.");
             TimeUnit.MILLISECONDS.sleep(1000);
         }
 
-        if(!this.etlJobConfigurationMapper.isActive(JOB_NAME)) {
+        if(!this.etlJobDao.isActive(JOB_NAME)) {
             return;
         }
 
-        JobParameters jobParameters = schedulerDao.getJobParameterFromTheLastExecutionAtNonOverrideModeRegardlessOfStatus(JOB_NAME);
+        JobParameters jobParameters = getJobParameterFromTheLastExecutionAtNonOverrideModeRegardlessOfStatus(JOB_NAME);
         int count;
         if (jobParameters == null) {
             System.out.println("First run");
@@ -113,10 +110,43 @@ public class DataSyncScheduler {
     }
 
     public void pause() {
-        this.etlJobConfigurationMapper.setIsActive(JOB_NAME, false);
+        this.etlJobDao.setIsActive(JOB_NAME, false);
     }
 
     public void unpause() {
-        this.etlJobConfigurationMapper.setIsActive(JOB_NAME, true);
+        this.etlJobDao.setIsActive(JOB_NAME, true);
     }
+
+    private JobInstance getTheLastJobInstance(String job) {
+        // this returns the job instances in decreasing order of created time. this way, we are asking for the last instance triggered.
+        // so what happens for retries?
+        List<JobInstance> previousInstances = this.jobExplorer.findJobInstancesByJobName(job, 0, 1);
+        if(previousInstances.isEmpty()) {
+            return null;
+        }
+        JobInstance jobInstance = previousInstances.get(0);
+        return jobInstance;
+    }
+
+
+    public JobParameters getJobParameterFromTheLastExecutionAtNonOverrideModeRegardlessOfStatus(String jobName) {
+        JobInstance jobInstance = getTheLastJobInstance(jobName);
+        if(jobInstance == null) {
+            return null;
+        }
+        List<JobExecution> jobExecutions = this.jobExplorer.getJobExecutions(jobInstance);
+        JobParameters jobParameters = jobExecutions.stream().map(e -> e.getJobParameters()).findFirst().get();
+        return jobParameters;
+    }
+
+
+    public boolean isLastExecutionAtNonOverrideModeStillRunning(String jobName) {
+        JobInstance jobInstance = getTheLastJobInstance(jobName);
+        if(jobInstance == null) {
+            return false;
+        }
+        List<JobExecution> jobExecutions = this.jobExplorer.getJobExecutions(jobInstance);
+        return jobExecutions.stream().anyMatch(e->e.isRunning());
+    }
+
 }

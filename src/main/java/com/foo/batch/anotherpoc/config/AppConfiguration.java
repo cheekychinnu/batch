@@ -1,7 +1,7 @@
 package com.foo.batch.anotherpoc.config;
 
+import com.foo.batch.anotherpoc.dao.DataSyncJobDao;
 import com.foo.batch.anotherpoc.domain.DataSyncJobMetadata;
-import com.foo.batch.anotherpoc.mapper.DataSyncJobMetadataMapper;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.JobRegistry;
@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 
 @Configuration
 
-@MapperScan("com.foo.batch.anotherpoc.mapper")
+@MapperScan("com.foo.batch.anotherpoc.dao.mapper")
 @Profile("schedulerpoc")
 public class AppConfiguration extends DefaultBatchConfigurer implements ApplicationContextAware {
 
@@ -59,10 +59,9 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
     private JobRegistry jobRegistry;
 
     @Autowired
-    private JobExplorer jobExplorer;
-
+    private DataSyncJobDao  dataSyncJobDao;
     @Autowired
-    private DataSyncJobMetadataMapper dataSyncJobMetadataMapper;
+    private JobExplorer jobExplorer;
 
     private ApplicationContext applicationContext;
 
@@ -269,7 +268,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
         SimpleAsyncTaskExecutor simpleAsyncTaskExecutor = new SimpleAsyncTaskExecutor("ETL-EXEC");
 
         List<DataSyncJobMetadata> sortedMetadataByIncreasingRank =
-                dataSyncJobMetadataMapper.findAll()
+                dataSyncJobDao.findAll()
                         .stream().sorted(Comparator.comparingInt(e -> e.getRank())).collect(Collectors.toList());
 
         List<Flow> flows = new ArrayList<>();

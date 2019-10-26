@@ -1,4 +1,4 @@
-package com.foo.batch.anotherpoc.mapper;
+package com.foo.batch.anotherpoc.dao.mapper;
 
 import com.foo.batch.anotherpoc.domain.DataSyncJobMetadata;
 import org.apache.ibatis.annotations.Mapper;

@@ -1,15 +1,10 @@
 package com.foo.batch.anotherpoc.controller;
 
 
-import com.foo.batch.anotherpoc.config.DataSyncScheduler;
-import com.foo.batch.anotherpoc.dao.SchedulerDao;
+import com.foo.batch.anotherpoc.service.DataSyncService;
 import org.springframework.batch.core.BatchStatus;
-import org.springframework.batch.core.Job;
-import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobParametersInvalidException;
-import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobInstanceAlreadyExistsException;
-import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.batch.core.launch.NoSuchJobException;
 import org.springframework.batch.core.launch.NoSuchJobExecutionException;
 import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteException;
@@ -20,78 +15,43 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.WebRequest;
 
-import java.util.concurrent.TimeUnit;
-
 @RestController
-@RequestMapping("/sync")
+@RequestMapping("/data-sync")
 public class DataSyncLauncherController {
 
-    private final static String JOB_NAME = "data-sync";
-
     @Autowired
-    private JobOperator jobOperator;
-    @Autowired
-    private JobExplorer jobExplorer;
-    @Autowired
-    private SchedulerDao schedulerDao;
-    @Autowired
-    private Job job;
-    @Autowired
-    private DataSyncScheduler dataSyncScheduler;
+    private DataSyncService dataSyncService;
 
     @RequestMapping(value = "/launch/", method = RequestMethod.GET)
     @ResponseStatus(HttpStatus.ACCEPTED)
     public Long launch(@RequestParam("name") String name, @RequestParam("jobName") String jobName)
             throws JobParametersInvalidException, NoSuchJobException, JobInstanceAlreadyExistsException {
-        return this.jobOperator.start(jobName, String.format("name=%s", name));
+        return dataSyncService.runDataSyncOverrideMode(name, jobName);
     }
-
-   /* @RequestMapping(value = "/launchOverride/", method = RequestMethod.GET)
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    public Long launchOverride(@RequestParam("name") String name) throws JobParametersInvalidException,
-            NoSuchJobException, JobInstanceAlreadyExistsException {
-        JobParameters jobParameters = new JobParametersBuilder()
-                .addString("name", name)
-                .addString("override", "true")
-                .addLong("time", System.currentTimeMillis())
-                .toJobParameters();
-        return this.jobOperator.start(JOB_NAME + "-override", String.format("name=%s,time=%s", name, System.currentTimeMillis()));
-    }*/
 
     @RequestMapping(value = "/checkStatus/{id}", method = RequestMethod.GET)
     @ResponseStatus(HttpStatus.OK)
     public BatchStatus checkStatus(@PathVariable("id") Long executionId) {
-        JobExecution jobExecution = this.jobExplorer.getJobExecution(executionId);
-        return jobExecution.getStatus();
+        return dataSyncService.getJobExecutionStatus(executionId);
     }
 
     @RequestMapping(value = "/bootstrap/", method = RequestMethod.GET)
     @ResponseStatus(HttpStatus.OK)
     public Long bootstrap(@RequestParam("name") String name) throws InterruptedException, JobParametersInvalidException,
             JobInstanceAlreadyExistsException, NoSuchJobException {
-        dataSyncScheduler.pause();
-        while (schedulerDao.isLastExecutionAtNonOverrideModeStillRunning(JOB_NAME)) {
-            TimeUnit.MILLISECONDS.sleep(100);
-        }
-        Long job = null;
-        try {
-            job = this.jobOperator.start(JOB_NAME, "name=" + name);
-        } finally {
-            dataSyncScheduler.unpause();
-        }
-        return job;
+        return dataSyncService.bootstrapDataSyncScheduler(name);
     }
 
-    @RequestMapping(value = "/disable", method = RequestMethod.GET)
+    @RequestMapping(value = "/pause", method = RequestMethod.GET)
     @ResponseStatus(HttpStatus.OK)
-    public void disable() throws InterruptedException {
-        dataSyncScheduler.pause();
+    public void pause() throws InterruptedException {
+        dataSyncService.pauseDataSyncScheduler();
     }
 
-    @RequestMapping(value = "/enable", method = RequestMethod.GET)
+    @RequestMapping(value = "/unpause", method = RequestMethod.GET)
     @ResponseStatus(HttpStatus.OK)
-    public void enable() throws InterruptedException {
-        dataSyncScheduler.unpause();
+    public void unpause() throws InterruptedException {
+        dataSyncService.unpauseDataSyncScheduler();
     }
 
     @RequestMapping(value = "/retry/{id}", method = RequestMethod.GET)
@@ -99,7 +59,7 @@ public class DataSyncLauncherController {
     public Long retry(@PathVariable("id") Long executionId) throws InterruptedException,
             JobParametersInvalidException, JobRestartException, JobInstanceAlreadyCompleteException,
             NoSuchJobExecutionException, NoSuchJobException {
-        return this.jobOperator.restart(executionId);
+        return dataSyncService.retry(executionId);
     }
 
     @ExceptionHandler(Exception.class)

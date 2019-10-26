@@ -12,13 +12,10 @@
 
     create table etl_job_configuration (
         job_id int,
-        is_active boolean,
-        primary key (job_id)
-    );
-
-    create table job (
-        job_id int,
         job_name varchar(100),
+        is_override_job boolean,
+        schedule varchar(50),
+        is_active boolean,
         primary key (job_id)
     );
 
@@ -30,6 +27,5 @@
     insert into data_sync_job_metadata values (2, 2);
     insert into data_sync_job_metadata values (3, 3);
 
-    insert into job values (1, 'data-sync');
-
-    insert into etl_job_configuration values (1, true);
+    insert into etl_job_configuration values (1, 'data-sync', false, '10000', true);
+    insert into etl_job_configuration values (2, 'data-sync-override', true, null, true);
