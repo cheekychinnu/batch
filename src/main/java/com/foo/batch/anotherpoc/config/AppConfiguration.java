@@ -1,5 +1,6 @@
 package com.foo.batch.anotherpoc.config;
 
+import org.omg.SendingContext.RunTime;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.configuration.annotation.DefaultBatchConfigurer;
@@ -15,6 +16,7 @@ import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.batch.core.launch.support.SimpleJobLauncher;
 import org.springframework.batch.core.launch.support.SimpleJobOperator;
 import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -101,9 +103,29 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                             ". Going to sleep for " + duration);
 
                     TimeUnit.MILLISECONDS.sleep(duration);
+                    chunkContext.getStepContext().getStepExecution().getExecutionContext().putString("referenceET","done for "+duration);
                     System.out.println(Thread.currentThread().getName() + " Executing reference reader. Finished");
                     return RepeatStatus.FINISHED;
-                }).build();
+                })
+                .listener(new StepExecutionListener() {
+                    @Override
+                    public void beforeStep(StepExecution stepExecution) {
+
+                    }
+
+                    @Override
+                    public ExitStatus afterStep(StepExecution stepExecution) {
+                        // only after the entire step is done, you add it to the Job execution context.
+                        // in ideal batch infra, until reference et is done, finalStep() will not even begin but we are overriding that behavior
+                        // so it is upto us to do this.
+                        // another way is check for the step execution status in finalStep()
+                        stepExecution.getJobExecution().getExecutionContext()
+                                .putString("referenceET",
+                                        stepExecution.getExecutionContext().getString("referenceET"));
+                        return stepExecution.getExitStatus();
+                    }
+                })
+                .build();
     }
 
     @Bean
@@ -123,15 +145,21 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                                 .put("restart", true);
                     }
 
-                    if (fail) {
-                        throw new RuntimeException("Intentional exception");
-                    }
                     Random random = new Random();
                     int duration = random.nextInt(6000);
                     System.out.println(Thread.currentThread().getName() + " Executing trade reader for"
                             + chunkContext.getStepContext().getJobParameters().get("name") +
                             ". Going to sleep for " + duration);
                     TimeUnit.MILLISECONDS.sleep(duration);
+                    if (fail) {
+                        throw new RuntimeException("Intentional exception");
+                    }
+                    chunkContext.getStepContext().getStepExecution().getJobExecution().getExecutionContext()
+                            .putString("tradeET","done for "+duration);
+                    // I am intentionally throwing this exception after I have updated the job context
+//                    if (fail) {
+//                        throw new RuntimeException("Intentional exception");
+//                    }
                     System.out.println(Thread.currentThread().getName() + " Executing trade reader. Finished");
                     return RepeatStatus.FINISHED;
                 }).build();
@@ -151,6 +179,8 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                     System.out.println(Thread.currentThread().getName() + " Executing pricing reader for "+
                             chunkContext.getStepContext().getJobParameters().get("name") + " going to sleep for "+duration);
                     TimeUnit.MILLISECONDS.sleep(duration);
+                    chunkContext.getStepContext().getStepExecution().getJobExecution().getExecutionContext().
+                            putString("pricingET","done for "+duration);
                     System.out.println(Thread.currentThread().getName() + " Executing pricing reader. Finished");
                     return RepeatStatus.FINISHED;
                 }).build();
@@ -165,14 +195,39 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
     public Step finalStep() {
         return stepBuilderFactory.get("final-send")
                 .tasklet((contribution, chunkContext) -> {
+                    // job execution context is stored between retries.
+                    ExecutionContext jobExecutionContext = chunkContext.getStepContext().getStepExecution()
+                            .getJobExecution().getExecutionContext();
+                    String pricingET = jobExecutionContext.containsKey("pricingET") ? jobExecutionContext
+                            .getString("pricingET") : null;
+                    String referenceET = jobExecutionContext.containsKey("referenceET") ?jobExecutionContext
+                            .getString("referenceET") : null;
+                    String tradeET = jobExecutionContext.containsKey("tradeET")
+                            ? jobExecutionContext
+                            .getString("tradeET") : null;
+
+                    System.out.println("************"+chunkContext.getStepContext().getStepExecution()
+                            .getExecutionContext().get("final-step-state"));
+                    chunkContext.getStepContext().getStepExecution().getExecutionContext()
+                            .put("final-step-state", pricingET+" "+referenceET+" "+tradeET);
+
                     System.out.println(Thread.currentThread().getName() + " Final for job parameter : " +
-                            chunkContext.getStepContext().getJobParameters().get("name"));
+                            chunkContext.getStepContext().getJobParameters().get("name")+"" +
+                            " and sending data :"+pricingET+", "+tradeET+", "+referenceET
+                    );
+
+                    // what happens when I retry a retry? - step execution lives across retries.
+                    /*if(tradeET != null) {
+                        throw new RuntimeException("Intentionally failing a retry");
+                    }*/
+
                     return RepeatStatus.FINISHED;
                 })
                 .listener(new StepExecutionListener() {
                     @Override
                     public void beforeStep(StepExecution stepExecution) {
                         Collection<StepExecution> stepExecutions = stepExecution.getJobExecution().getStepExecutions();
+
                     }
 
                     @Override
