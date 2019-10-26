@@ -1,8 +1,8 @@
 package com.foo.batch.anotherpoc.config;
 
+import com.foo.batch.anotherpoc.domain.DataSyncJobMetadata;
 import com.foo.batch.anotherpoc.mapper.DataSyncJobMetadataMapper;
 import org.mybatis.spring.annotation.MapperScan;
-import org.omg.SendingContext.RunTime;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.configuration.annotation.DefaultBatchConfigurer;
@@ -29,9 +29,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 
-import java.util.Collection;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Configuration
 
@@ -39,17 +39,25 @@ import java.util.concurrent.TimeUnit;
 @Profile("schedulerpoc")
 public class AppConfiguration extends DefaultBatchConfigurer implements ApplicationContextAware {
 
-    Random random = new Random();
+    private static final String PRICE = "price";
+    private static final String REFERENCE = "reference";
+    private static final String TRADE = "trade";
+
     @Autowired
     private JobBuilderFactory jobBuilderFactory;
+
     @Autowired
     private StepBuilderFactory stepBuilderFactory;
+
     @Autowired
     private JobLauncher jobLauncher;
+
     @Autowired
     private JobRepository jobRepository;
+
     @Autowired
     private JobRegistry jobRegistry;
+
     @Autowired
     private JobExplorer jobExplorer;
 
@@ -64,6 +72,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
         jobRegistryBeanPostProcessor.setJobRegistry(this.jobRegistry);
         jobRegistryBeanPostProcessor.setBeanFactory(this.applicationContext.getAutowireCapableBeanFactory());
         jobRegistryBeanPostProcessor.afterPropertiesSet();
+        System.out.println("job registry initialized");
         return jobRegistryBeanPostProcessor;
     }
 
@@ -105,12 +114,12 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                 .tasklet((contribution, chunkContext) -> {
                     Random random = new Random();
                     int duration = random.nextInt(6000);
-                    System.out.println(Thread.currentThread().getName() + " Executing reference reader for "+
+                    System.out.println(Thread.currentThread().getName() + " Executing reference reader for " +
                             chunkContext.getStepContext().getJobParameters().get("name") +
                             ". Going to sleep for " + duration);
 
                     TimeUnit.MILLISECONDS.sleep(duration);
-                    chunkContext.getStepContext().getStepExecution().getExecutionContext().putString("referenceET","done for "+duration);
+                    chunkContext.getStepContext().getStepExecution().getExecutionContext().putString("referenceET", "done for " + duration);
                     System.out.println(Thread.currentThread().getName() + " Executing reference reader. Finished");
                     return RepeatStatus.FINISHED;
                 })
@@ -162,7 +171,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                         throw new RuntimeException("Intentional exception");
                     }
                     chunkContext.getStepContext().getStepExecution().getJobExecution().getExecutionContext()
-                            .putString("tradeET","done for "+duration);
+                            .putString("tradeET", "done for " + duration);
                     // I am intentionally throwing this exception after I have updated the job context
 //                    if (fail) {
 //                        throw new RuntimeException("Intentional exception");
@@ -183,11 +192,11 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                 .tasklet((contribution, chunkContext) -> {
                     Random random = new Random();
                     int duration = random.nextInt(6000);
-                    System.out.println(Thread.currentThread().getName() + " Executing pricing reader for "+
-                            chunkContext.getStepContext().getJobParameters().get("name") + " going to sleep for "+duration);
+                    System.out.println(Thread.currentThread().getName() + " Executing pricing reader for " +
+                            chunkContext.getStepContext().getJobParameters().get("name") + " going to sleep for " + duration);
                     TimeUnit.MILLISECONDS.sleep(duration);
                     chunkContext.getStepContext().getStepExecution().getJobExecution().getExecutionContext().
-                            putString("pricingET","done for "+duration);
+                            putString("pricingET", "done for " + duration);
                     System.out.println(Thread.currentThread().getName() + " Executing pricing reader. Finished");
                     return RepeatStatus.FINISHED;
                 }).build();
@@ -200,7 +209,6 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
 
     @Bean
     public Step finalStep() {
-        System.out.println("############"+dataSyncJobMetadataMapper.findAll());
         return stepBuilderFactory.get("final-send")
                 .tasklet((contribution, chunkContext) -> {
                     // job execution context is stored between retries.
@@ -208,20 +216,20 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                             .getJobExecution().getExecutionContext();
                     String pricingET = jobExecutionContext.containsKey("pricingET") ? jobExecutionContext
                             .getString("pricingET") : null;
-                    String referenceET = jobExecutionContext.containsKey("referenceET") ?jobExecutionContext
+                    String referenceET = jobExecutionContext.containsKey("referenceET") ? jobExecutionContext
                             .getString("referenceET") : null;
                     String tradeET = jobExecutionContext.containsKey("tradeET")
                             ? jobExecutionContext
                             .getString("tradeET") : null;
 
-                    System.out.println("************"+chunkContext.getStepContext().getStepExecution()
+                    System.out.println("************" + chunkContext.getStepContext().getStepExecution()
                             .getExecutionContext().get("final-step-state"));
                     chunkContext.getStepContext().getStepExecution().getExecutionContext()
-                            .put("final-step-state", pricingET+" "+referenceET+" "+tradeET);
+                            .put("final-step-state", pricingET + " " + referenceET + " " + tradeET);
 
                     System.out.println(Thread.currentThread().getName() + " Final for job parameter : " +
-                            chunkContext.getStepContext().getJobParameters().get("name")+"" +
-                            " and sending data :"+pricingET+", "+tradeET+", "+referenceET
+                            chunkContext.getStepContext().getJobParameters().get("name") + "" +
+                            " and sending data :" + pricingET + ", " + tradeET + ", " + referenceET
                     );
 
                     // what happens when I retry a retry? - step execution lives across retries.
@@ -244,7 +252,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                                 .getStepExecutions().stream().anyMatch(
                                         s -> s.getExitStatus().getExitCode().equals(ExitStatus.FAILED.getExitCode())
                                 );
-                        if(subJobsFailed) {
+                        if (subJobsFailed) {
                             stepExecution.setStatus(BatchStatus.FAILED);
                             stepExecution.setExitStatus(ExitStatus.FAILED);
                             return ExitStatus.FAILED;
@@ -256,12 +264,33 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
     }
 
     @Bean
-    public Job dataSync() {
+    public Job dataSync() throws Exception {
+        System.out.println("datasync job initialized");
         SimpleAsyncTaskExecutor simpleAsyncTaskExecutor = new SimpleAsyncTaskExecutor("ETL-EXEC");
 
+        List<DataSyncJobMetadata> sortedMetadataByIncreasingRank =
+                dataSyncJobMetadataMapper.findAll()
+                        .stream().sorted(Comparator.comparingInt(e -> e.getRank())).collect(Collectors.toList());
+
+        List<Flow> flows = new ArrayList<>();
+        System.out.println("Sorted ########## " + sortedMetadataByIncreasingRank);
+        for (DataSyncJobMetadata metadata : sortedMetadataByIncreasingRank) {
+            String dataset = metadata.getDataset();
+            if (dataset.equals(PRICE)) {
+                flows.add(pricingETFlow());
+            } else if (dataset.equals(REFERENCE)) {
+                flows.add(referenceETFlow());
+            } else if (dataset.equals(TRADE)) {
+                flows.add(tradeETFlow());
+            } else {
+                throw new IllegalStateException("Dataset " + dataset + " is not configured yet");
+            }
+        }
+        Flow[] flowArray = new Flow[flows.size()];
+        flowArray = flows.toArray(flowArray);
         Flow etlFlow = new FlowBuilder<Flow>("et-flow-split")
                 .split(simpleAsyncTaskExecutor)
-                .add(pricingETFlow(),referenceETFlow(),tradeETFlow())
+                .add(flowArray)
                 .end();
         return jobBuilderFactory.get("data-sync")
                 .start(etlFlow)

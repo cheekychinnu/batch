@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 public class DataSyncLauncherController {
 
     private final static String JOB_NAME = "data-sync";
+
     @Autowired
     private JobOperator jobOperator;
     @Autowired
