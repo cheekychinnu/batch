@@ -1,6 +1,7 @@
-package com.foo.batch.anotherpoc.config;
+package com.foo.batch.anotherpoc.controller;
 
 
+import com.foo.batch.anotherpoc.config.DataSyncScheduler;
 import com.foo.batch.anotherpoc.dao.SchedulerDao;
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.Job;

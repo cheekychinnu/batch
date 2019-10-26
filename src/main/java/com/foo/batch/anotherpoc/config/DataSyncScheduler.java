@@ -25,6 +25,7 @@ public class DataSyncScheduler {
 
     private static final String JOB_NAME= "data-sync";
     private volatile boolean pause = false;
+
     @Autowired
     private JobOperator jobOperator;
     @Autowired

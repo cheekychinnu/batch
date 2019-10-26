@@ -1,5 +1,7 @@
 package com.foo.batch.anotherpoc.config;
 
+import com.foo.batch.anotherpoc.mapper.DataSyncJobMetadataMapper;
+import org.mybatis.spring.annotation.MapperScan;
 import org.omg.SendingContext.RunTime;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.JobRegistry;
@@ -32,6 +34,8 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 @Configuration
+
+@MapperScan("com.foo.batch.anotherpoc.mapper")
 @Profile("schedulerpoc")
 public class AppConfiguration extends DefaultBatchConfigurer implements ApplicationContextAware {
 
@@ -48,6 +52,9 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
     private JobRegistry jobRegistry;
     @Autowired
     private JobExplorer jobExplorer;
+
+    @Autowired
+    private DataSyncJobMetadataMapper dataSyncJobMetadataMapper;
 
     private ApplicationContext applicationContext;
 
@@ -193,6 +200,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
 
     @Bean
     public Step finalStep() {
+        System.out.println("############"+dataSyncJobMetadataMapper.findAll());
         return stepBuilderFactory.get("final-send")
                 .tasklet((contribution, chunkContext) -> {
                     // job execution context is stored between retries.
