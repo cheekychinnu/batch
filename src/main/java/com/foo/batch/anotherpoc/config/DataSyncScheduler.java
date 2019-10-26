@@ -97,6 +97,7 @@ public class DataSyncScheduler {
 
         JobParameters jobParameters = getJobParameterFromTheLastExecutionAtNonOverrideModeRegardlessOfStatus(JOB_NAME);
         int count;
+        // TODO: use JobParameterIncrementer
         if (jobParameters == null) {
             System.out.println("First run");
             count = 0;

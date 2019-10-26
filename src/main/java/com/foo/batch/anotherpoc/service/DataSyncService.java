@@ -30,8 +30,7 @@ public class DataSyncService {
     private JobOperator jobOperator;
     @Autowired
     private JobExplorer jobExplorer;
-    @Autowired
-    private Job job;
+
     @Autowired
     private DataSyncScheduler dataSyncScheduler;
 

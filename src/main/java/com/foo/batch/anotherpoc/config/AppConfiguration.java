@@ -12,6 +12,7 @@ import org.springframework.batch.core.configuration.support.JobRegistryBeanPostP
 import org.springframework.batch.core.converter.DefaultJobParametersConverter;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.job.builder.FlowBuilder;
+import org.springframework.batch.core.job.builder.FlowJobBuilder;
 import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.JobOperator;
@@ -22,6 +23,7 @@ import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
@@ -262,16 +264,12 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                 .build();
     }
 
-    @Bean
-    public Job dataSync() throws Exception {
-        System.out.println("datasync job initialized");
-        SimpleAsyncTaskExecutor simpleAsyncTaskExecutor = new SimpleAsyncTaskExecutor("ETL-EXEC");
-
+    private Flow[] getDatasetFromConfiguration() {
+        List<Flow> flows = new ArrayList<>();
         List<DataSyncJobMetadata> sortedMetadataByIncreasingRank =
                 dataSyncJobDao.findAll()
                         .stream().sorted(Comparator.comparingInt(e -> e.getRank())).collect(Collectors.toList());
 
-        List<Flow> flows = new ArrayList<>();
         System.out.println("Sorted ########## " + sortedMetadataByIncreasingRank);
         for (DataSyncJobMetadata metadata : sortedMetadataByIncreasingRank) {
             String dataset = metadata.getDataset();
@@ -287,18 +285,38 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
         }
         Flow[] flowArray = new Flow[flows.size()];
         flowArray = flows.toArray(flowArray);
+        return flowArray;
+    }
+
+    private FlowJobBuilder jobBuilder(String jobName) {
+        SimpleAsyncTaskExecutor simpleAsyncTaskExecutor = new SimpleAsyncTaskExecutor(jobName+"-EXEC");
+
         Flow etlFlow = new FlowBuilder<Flow>("et-flow-split")
                 .split(simpleAsyncTaskExecutor)
-                .add(flowArray)
+                .add(getDatasetFromConfiguration())
                 .end();
-        return jobBuilderFactory.get("data-sync")
+        return jobBuilderFactory.get(jobName)
                 .start(etlFlow)
                 .on("COMPLETED")
                 .to(finalStep())
                 .from(etlFlow)
                 .on("FAILED")
                 .to(finalStep())
-                .end().build();
+                .end();
+    }
+
+    @Bean
+    @Qualifier("dataSync")
+    public Job dataSync() throws Exception {
+        System.out.println("datasync job initialized");
+        return jobBuilder("data-sync").build();
+    }
+
+    @Bean
+    @Qualifier("dataSyncOverride")
+    public Job dataSyncOverride() throws Exception {
+        System.out.println("datasync job override job initialized");
+        return jobBuilder("data-sync-override").build();
     }
 
 }
