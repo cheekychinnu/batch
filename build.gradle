@@ -26,6 +26,9 @@ dependencies {
     implementation 'org.flywaydb:flyway-core'
     runtimeOnly 'com.h2database:h2'
     runtimeOnly 'org.postgresql:postgresql'
+
+    implementation 'io.springfox:springfox-swagger2:2.6.1'
+    implementation 'io.springfox:springfox-swagger-ui:2.6.1'
 //    implementation 'ru.yandex.qatools.embed:postgresql-embedded:2.9'
     //**************************************************************
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
