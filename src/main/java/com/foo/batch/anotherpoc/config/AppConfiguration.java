@@ -44,8 +44,8 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
     public static final String JOB_PARAMETER_KEY = "name";
 
     public final static String DATA_SYNC_JOB_NAME = "data-sync";
-    public final static String OVERRIDE_MODE_TAG ="-override";
-    private final static String DATA_SYNC_OVERRIDE_JOB_NAME = DATA_SYNC_JOB_NAME+OVERRIDE_MODE_TAG;
+    public final static String OVERRIDE_MODE_TAG = "-override";
+    private final static String DATA_SYNC_OVERRIDE_JOB_NAME = DATA_SYNC_JOB_NAME + OVERRIDE_MODE_TAG;
 
     private static final String PRICE = "price";
     private static final String REFERENCE = "reference";
@@ -279,14 +279,18 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
         System.out.println("Sorted ########## " + sortedMetadataByIncreasingRank);
         for (DataSyncJobMetadata metadata : sortedMetadataByIncreasingRank) {
             String dataset = metadata.getDataset();
-            if (dataset.equals(PRICE)) {
-                flows.add(pricingETFlow());
-            } else if (dataset.equals(REFERENCE)) {
-                flows.add(referenceETFlow());
-            } else if (dataset.equals(TRADE)) {
-                flows.add(tradeETFlow());
-            } else {
-                throw new IllegalStateException("Dataset " + dataset + " is not configured yet");
+            switch (dataset) {
+                case PRICE:
+                    flows.add(pricingETFlow());
+                    break;
+                case REFERENCE:
+                    flows.add(referenceETFlow());
+                    break;
+                case TRADE:
+                    flows.add(tradeETFlow());
+                    break;
+                default:
+                    throw new IllegalStateException("Dataset " + dataset + " is not configured yet");
             }
         }
         Flow[] flowArray = new Flow[flows.size()];
@@ -296,7 +300,9 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
 
     private FlowJobBuilder jobBuilder(String jobName) {
         SimpleAsyncTaskExecutor simpleAsyncTaskExecutor = new SimpleAsyncTaskExecutor(jobName + "-EXEC");
-
+        // you can reuse the flow across jobs. you just need to create it as separate beans
+        // since I need executor specific to job name, for now I am leaving it like that.
+        // once we make our task executors production ready, this will go away.
         Flow etlFlow = new FlowBuilder<Flow>("et-flow-split")
                 .split(simpleAsyncTaskExecutor)
                 .add(getDatasetFromConfiguration())
