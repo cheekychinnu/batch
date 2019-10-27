@@ -22,11 +22,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import static com.foo.batch.anotherpoc.config.AppConfiguration.DATA_SYNC_JOB_NAME;
+
 @Component
 @DependsOn("dataSync")
 public class DataSyncScheduler {
 
-    private static final String JOB_NAME = "data-sync";
 
     @Autowired
     private JobRepository jobRepository;
@@ -46,7 +47,7 @@ public class DataSyncScheduler {
 
         System.out.println("postconstruct invoked");
         // cleanup previous executions if any
-        Set<JobExecution> jobExecutions = jobExplorer.findRunningJobExecutions("data-sync");
+        Set<JobExecution> jobExecutions = jobExplorer.findRunningJobExecutions(DATA_SYNC_JOB_NAME);
         System.out.println("Found running executions "+jobExecutions.size());
         for (JobExecution jobExecution : jobExecutions) {
             Collection<StepExecution> stepExecutions = jobExecution.getStepExecutions();
@@ -71,7 +72,7 @@ public class DataSyncScheduler {
 
     @Bean
     public String getFixedDelayForDataSync() {
-        return etlJobDao.getEtlConfiguration(JOB_NAME).getSchedule();
+        return etlJobDao.getEtlConfiguration(DATA_SYNC_JOB_NAME).getSchedule();
     }
 
     //    https://stackoverflow.com/questions/24033208/how-to-prevent-overlapping-schedules-in-spring
@@ -86,36 +87,23 @@ public class DataSyncScheduler {
         // if the previous instance just started a job execution. so you might have to do a cleanup during bootstrap
         // to stop all the executions : I have added one cleanup logic here.
         // Hence @DependsOn the job itself. because you cannot restart the job before the job bean is initialized.
-        while (isLastExecutionAtNonOverrideModeStillRunning(JOB_NAME)) {
+        while (isLastExecutionAtNonOverrideModeStillRunning(DATA_SYNC_JOB_NAME)) {
             System.out.println("Previous execution for job is still running.. waiting.");
             TimeUnit.MILLISECONDS.sleep(1000);
         }
 
-        if(!this.etlJobDao.isActive(JOB_NAME)) {
+        if(!this.etlJobDao.isActive(DATA_SYNC_JOB_NAME)) {
             return;
         }
-
-        JobParameters jobParameters = getJobParameterFromTheLastExecutionAtNonOverrideModeRegardlessOfStatus(JOB_NAME);
-        int count;
-        // TODO: use JobParameterIncrementer
-        if (jobParameters == null) {
-            System.out.println("First run");
-            count = 0;
-        } else {
-            JobParameter name = jobParameters.getParameters().get("name");
-            int previousCount = Integer.parseInt(String.valueOf(name.getValue()));
-            System.out.println("Not first run. Previous count " + previousCount);
-            count = previousCount + 1;
-        }
-        this.jobOperator.start(JOB_NAME, "name=" + count);
+        this.jobOperator.startNextInstance(DATA_SYNC_JOB_NAME);
     }
 
     public void pause() {
-        this.etlJobDao.setIsActive(JOB_NAME, false);
+        this.etlJobDao.setIsActive(DATA_SYNC_JOB_NAME, false);
     }
 
     public void unpause() {
-        this.etlJobDao.setIsActive(JOB_NAME, true);
+        this.etlJobDao.setIsActive(DATA_SYNC_JOB_NAME, true);
     }
 
     private JobInstance getTheLastJobInstance(String job) {
@@ -128,18 +116,6 @@ public class DataSyncScheduler {
         JobInstance jobInstance = previousInstances.get(0);
         return jobInstance;
     }
-
-
-    public JobParameters getJobParameterFromTheLastExecutionAtNonOverrideModeRegardlessOfStatus(String jobName) {
-        JobInstance jobInstance = getTheLastJobInstance(jobName);
-        if(jobInstance == null) {
-            return null;
-        }
-        List<JobExecution> jobExecutions = this.jobExplorer.getJobExecutions(jobInstance);
-        JobParameters jobParameters = jobExecutions.stream().map(e -> e.getJobParameters()).findFirst().get();
-        return jobParameters;
-    }
-
 
     public boolean isLastExecutionAtNonOverrideModeStillRunning(String jobName) {
         JobInstance jobInstance = getTheLastJobInstance(jobName);

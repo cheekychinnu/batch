@@ -3,7 +3,6 @@ package com.foo.batch.anotherpoc.service;
 import com.foo.batch.anotherpoc.config.DataSyncScheduler;
 import com.foo.batch.anotherpoc.dao.EtlJobDao;
 import org.springframework.batch.core.BatchStatus;
-import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobParametersInvalidException;
 import org.springframework.batch.core.explore.JobExplorer;
@@ -18,11 +17,12 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.TimeUnit;
 
+import static com.foo.batch.anotherpoc.config.AppConfiguration.DATA_SYNC_JOB_NAME;
+import static com.foo.batch.anotherpoc.config.AppConfiguration.JOB_PARAMETER_KEY;
+import static com.foo.batch.anotherpoc.config.AppConfiguration.OVERRIDE_MODE_TAG;
+
 @Service
 public class DataSyncService {
-
-    private final static String JOB_NAME = "data-sync";
-    private final static String OVERRIDE_TAG = "-override";
 
     @Autowired
     private EtlJobDao etlJobDao;
@@ -37,12 +37,12 @@ public class DataSyncService {
     public Long runDataSyncOverrideMode(String jobParameter, String jobName)
             throws JobParametersInvalidException, JobInstanceAlreadyExistsException, NoSuchJobException {
 
-        if(!etlJobDao.isActive(jobName+OVERRIDE_TAG)) {
+        if(!etlJobDao.isActive(jobName+OVERRIDE_MODE_TAG)) {
             throw new IllegalArgumentException(jobName + " is disabled");
         }
 
-        return this.jobOperator.start(jobName+OVERRIDE_TAG,
-                String.format("name=%s,time=%s", jobParameter, System.currentTimeMillis()));
+        return this.jobOperator.start(jobName+OVERRIDE_MODE_TAG,
+                String.format(JOB_PARAMETER_KEY+"=%s,time=%s", jobParameter, System.currentTimeMillis()));
     }
 
     public BatchStatus getJobExecutionStatus(Long executionId) {
@@ -50,14 +50,15 @@ public class DataSyncService {
         return jobExecution.getStatus();
     }
 
-    public Long bootstrapDataSyncScheduler(String jobParameters) throws InterruptedException, JobParametersInvalidException, JobInstanceAlreadyExistsException, NoSuchJobException {
+    public Long bootstrapDataSyncScheduler(String jobParameters) throws InterruptedException,
+            JobParametersInvalidException, JobInstanceAlreadyExistsException, NoSuchJobException {
         dataSyncScheduler.pause();
-        while (dataSyncScheduler.isLastExecutionAtNonOverrideModeStillRunning(JOB_NAME)) {
+        while (dataSyncScheduler.isLastExecutionAtNonOverrideModeStillRunning(DATA_SYNC_JOB_NAME)) {
             TimeUnit.MILLISECONDS.sleep(100);
         }
         Long job = null;
         try {
-            job = this.jobOperator.start(JOB_NAME, "name=" + jobParameters);
+            job = this.jobOperator.start(DATA_SYNC_JOB_NAME, JOB_PARAMETER_KEY+"=" + jobParameters);
         } finally {
             dataSyncScheduler.unpause();
         }
@@ -72,7 +73,8 @@ public class DataSyncService {
         dataSyncScheduler.pause();
     }
 
-    public Long retry(Long executionId) throws JobParametersInvalidException, JobRestartException, JobInstanceAlreadyCompleteException, NoSuchJobExecutionException, NoSuchJobException {
+    public Long retry(Long executionId) throws JobParametersInvalidException, JobRestartException,
+            JobInstanceAlreadyCompleteException, NoSuchJobExecutionException, NoSuchJobException {
         return this.jobOperator.restart(executionId);
     }
 }

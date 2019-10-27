@@ -41,6 +41,12 @@ import java.util.stream.Collectors;
 @Profile("schedulerpoc")
 public class AppConfiguration extends DefaultBatchConfigurer implements ApplicationContextAware {
 
+    public static final String JOB_PARAMETER_KEY = "name";
+
+    public final static String DATA_SYNC_JOB_NAME = "data-sync";
+    public final static String OVERRIDE_MODE_TAG ="-override";
+    private final static String DATA_SYNC_OVERRIDE_JOB_NAME = DATA_SYNC_JOB_NAME+OVERRIDE_MODE_TAG;
+
     private static final String PRICE = "price";
     private static final String REFERENCE = "reference";
     private static final String TRADE = "trade";
@@ -61,7 +67,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
     private JobRegistry jobRegistry;
 
     @Autowired
-    private DataSyncJobDao  dataSyncJobDao;
+    private DataSyncJobDao dataSyncJobDao;
     @Autowired
     private JobExplorer jobExplorer;
 
@@ -116,7 +122,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                     Random random = new Random();
                     int duration = random.nextInt(6000);
                     System.out.println(Thread.currentThread().getName() + " Executing reference reader for " +
-                            chunkContext.getStepContext().getJobParameters().get("name") +
+                            chunkContext.getStepContext().getJobParameters().get(JOB_PARAMETER_KEY) +
                             ". Going to sleep for " + duration);
 
                     TimeUnit.MILLISECONDS.sleep(duration);
@@ -165,7 +171,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                     Random random = new Random();
                     int duration = random.nextInt(6000);
                     System.out.println(Thread.currentThread().getName() + " Executing trade reader for"
-                            + chunkContext.getStepContext().getJobParameters().get("name") +
+                            + chunkContext.getStepContext().getJobParameters().get(JOB_PARAMETER_KEY) +
                             ". Going to sleep for " + duration);
                     TimeUnit.MILLISECONDS.sleep(duration);
                     if (fail) {
@@ -194,7 +200,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                     Random random = new Random();
                     int duration = random.nextInt(6000);
                     System.out.println(Thread.currentThread().getName() + " Executing pricing reader for " +
-                            chunkContext.getStepContext().getJobParameters().get("name") + " going to sleep for " + duration);
+                            chunkContext.getStepContext().getJobParameters().get(JOB_PARAMETER_KEY) + " going to sleep for " + duration);
                     TimeUnit.MILLISECONDS.sleep(duration);
                     chunkContext.getStepContext().getStepExecution().getJobExecution().getExecutionContext().
                             putString("pricingET", "done for " + duration);
@@ -229,7 +235,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
                             .put("final-step-state", pricingET + " " + referenceET + " " + tradeET);
 
                     System.out.println(Thread.currentThread().getName() + " Final for job parameter : " +
-                            chunkContext.getStepContext().getJobParameters().get("name") + "" +
+                            chunkContext.getStepContext().getJobParameters().get(JOB_PARAMETER_KEY) + "" +
                             " and sending data :" + pricingET + ", " + tradeET + ", " + referenceET
                     );
 
@@ -289,7 +295,7 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
     }
 
     private FlowJobBuilder jobBuilder(String jobName) {
-        SimpleAsyncTaskExecutor simpleAsyncTaskExecutor = new SimpleAsyncTaskExecutor(jobName+"-EXEC");
+        SimpleAsyncTaskExecutor simpleAsyncTaskExecutor = new SimpleAsyncTaskExecutor(jobName + "-EXEC");
 
         Flow etlFlow = new FlowBuilder<Flow>("et-flow-split")
                 .split(simpleAsyncTaskExecutor)
@@ -309,14 +315,38 @@ public class AppConfiguration extends DefaultBatchConfigurer implements Applicat
     @Qualifier("dataSync")
     public Job dataSync() throws Exception {
         System.out.println("datasync job initialized");
-        return jobBuilder("data-sync").build();
+        return jobBuilder(DATA_SYNC_JOB_NAME)
+                .incrementer(dataSyncJobParameterIncrementer())
+                .build();
+    }
+
+    @Bean
+    public DataSyncJobParameterIncrementer dataSyncJobParameterIncrementer() {
+        return new DataSyncJobParameterIncrementer();
     }
 
     @Bean
     @Qualifier("dataSyncOverride")
     public Job dataSyncOverride() throws Exception {
         System.out.println("datasync job override job initialized");
-        return jobBuilder("data-sync-override").build();
+        return jobBuilder(DATA_SYNC_OVERRIDE_JOB_NAME).build();
+    }
+
+    static class DataSyncJobParameterIncrementer implements JobParametersIncrementer {
+
+        @Override
+        public JobParameters getNext(JobParameters parameters) {
+            JobParameter name = parameters.getParameters().get(JOB_PARAMETER_KEY);
+            if (name == null) {
+                System.out.println("First run");
+                return new JobParametersBuilder().addString(JOB_PARAMETER_KEY, String.valueOf(0)).toJobParameters();
+            }
+
+            int previousCount = Integer.parseInt(String.valueOf(name.getValue()));
+            System.out.println("Not first run. Previous count " + previousCount);
+            return new JobParametersBuilder().addString(JOB_PARAMETER_KEY,
+                    String.valueOf(previousCount + 1)).toJobParameters();
+        }
     }
 
 }
