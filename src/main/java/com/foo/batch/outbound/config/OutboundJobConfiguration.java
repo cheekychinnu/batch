@@ -135,7 +135,7 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
                 }
                 return null;
             }
-        },  items -> LOGGER.info(String.join(",", items)));
+        }, items -> LOGGER.info(String.join(",", items)));
     }
 
     @Bean
@@ -201,6 +201,7 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
         return stepBuilderFactory.get("pnl-run")
                 .tasklet((contribution, chunkContext) -> {
                     LOGGER.info("updating pnl run table");
+                    throwException();
                     return RepeatStatus.FINISHED;
                 }).build();
     }
@@ -217,16 +218,16 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
         return stepBuilderFactory.get("book-bundle-bu")
                 .tasklet((contribution, chunkContext) -> {
                     LOGGER.info("updating book bundle bu table");
-                    throwException();
                     return RepeatStatus.FINISHED;
                 }).build();
     }
 
     private void throwException() {
-        if(true) {
+        if (true) {
             throw new IllegalStateException("intentional exception");
         }
     }
+
     @Bean
     public Flow updateSpnGboTypeTableFlow() {
         return new FlowBuilder<Flow>("spn-gbo-type" + "-flow")
@@ -304,22 +305,25 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
 
                     @Override
                     public void afterJob(JobExecution jobExecution) {
-                        List<StepExecution> stepFailuresThatMatter = jobExecution.getStepExecutions().stream()
+                        List<StepExecution> failedSteps = jobExecution.getStepExecutions().stream()
                                 .filter(s -> s.getExitStatus().getExitCode().equals(ExitStatus.FAILED.getExitCode()))
-                                .filter(s -> !s.getStepName().equals("spn-gbo-type"))
-                                .filter(s -> !s.getStepName().equals("book-bundle-bu"))
                                 .collect(Collectors.toList());
-                        if(stepFailuresThatMatter.isEmpty()) {
-                            jobExecution.setExitStatus(ExitStatus.COMPLETED);
-                            jobExecution.setStatus(BatchStatus.COMPLETED);
-                        } else {
-                            boolean rollbackItselfFailed = stepFailuresThatMatter.stream().anyMatch(s -> s.getStepName().equals("rollback"));
-                            if(rollbackItselfFailed) {
+                        if (!failedSteps.isEmpty()) {
+                            boolean onlyUnImportantCommonTableUpdatedFailed = failedSteps.stream().map(StepExecution::getStepName).allMatch(n -> n.equals("spn-gbo-type") ||
+                                    n.equals("book-bundle-bu"));
+                            boolean rollbackItselfFailed = failedSteps.stream().anyMatch(s -> s.getStepName().equals("rollback"));
+                            if (onlyUnImportantCommonTableUpdatedFailed) {
+                                jobExecution.setExitStatus(new ExitStatus("FAILED_AT_UNIMPORTANT_COMMON_TABLES"));
+                            } else if (rollbackItselfFailed) {
                                 jobExecution.setExitStatus(new ExitStatus("FAILED_AT_ROLLBACK"));
+                            } else if (jobExecution.getStepExecutions().stream().anyMatch(e -> e.getStepName().equals("rollback"))) {
+                                jobExecution.setExitStatus(new ExitStatus("FAILED_BUT_ROLLED_BACK"));
+                                jobExecution.setStatus(BatchStatus.FAILED);
                             }
                         }
                     }
                 })
+                .preventRestart()
                 .build();
     }
 }
