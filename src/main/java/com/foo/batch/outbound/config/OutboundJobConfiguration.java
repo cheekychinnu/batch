@@ -200,8 +200,9 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
     public Step updatePnlRunTableStep() {
         return stepBuilderFactory.get("pnl-run")
                 .tasklet((contribution, chunkContext) -> {
+                    Thread.sleep(2000);
                     LOGGER.info("updating pnl run table");
-                    throwException();
+//                    throwException();
                     return RepeatStatus.FINISHED;
                 }).build();
     }
@@ -217,7 +218,9 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
     public Step updateBookBundleBusinessUnitTableStep() {
         return stepBuilderFactory.get("book-bundle-bu")
                 .tasklet((contribution, chunkContext) -> {
+                    Thread.sleep(2000);
                     LOGGER.info("updating book bundle bu table");
+                    throwException();
                     return RepeatStatus.FINISHED;
                 }).build();
     }
@@ -239,9 +242,22 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
     public Step updateSpnGboTypeTableStep() {
         return stepBuilderFactory.get("spn-gbo-type")
                 .tasklet((contribution, chunkContext) -> {
+                    Thread.sleep(2000);
                     LOGGER.info("updating spn gbo type table");
                     return RepeatStatus.FINISHED;
-                }).build();
+                })
+                .listener(new StepExecutionListener() {
+                    @Override
+                    public void beforeStep(StepExecution stepExecution) {
+                        throwException();
+                    }
+
+                    @Override
+                    public ExitStatus afterStep(StepExecution stepExecution) {
+                        return stepExecution.getExitStatus();
+                    }
+                })
+                .build();
     }
 
     @Bean
@@ -270,7 +286,21 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
     public Step rollbackGearChanges() {
         return stepBuilderFactory.get("rollback")
                 .tasklet((contribution, chunkContext) -> {
+                    Thread.sleep(2000);
                     LOGGER.info("rollback");
+//                                        throwException();
+                    return RepeatStatus.FINISHED;
+                }).build();
+    }
+
+    @Bean
+    public Step determineQueryKtRange() {
+        return stepBuilderFactory.get("determine-kt-range")
+                .tasklet((contribution, chunkContext) -> {
+                    LOGGER.info("determine-kt-range");
+                    Thread.sleep(10000);
+//                    throwException();
+//                    chunkContext.getStepContext().getStepExecution().setExitStatus(new ExitStatus("NOOP"));
                     return RepeatStatus.FINISHED;
                 }).build();
     }
@@ -289,12 +319,11 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
         return jobBuilderFactory
                 .get(jobName)
                 .incrementer(new RunIdIncrementer())
-                .start(etlFlow)
-                .on("COMPLETED")
-                .to(updateCommonTablesForAccountingPnlFlow())
-                .from(etlFlow)
-                .on("FAILED")
-                .to(rollbackGearChanges())
+                .start(determineQueryKtRange()).on("COMPLETED").to(etlFlow)
+                .from(determineQueryKtRange()).on("FAILED").fail()
+                .from(determineQueryKtRange()).on("NOOP").end()
+                .from(etlFlow).on("COMPLETED").to(updateCommonTablesForAccountingPnlFlow())
+                .from(etlFlow).on("FAILED").to(rollbackGearChanges())
                 .end()
                 .listener(new JobExecutionListener() {
 
@@ -305,6 +334,7 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
 
                     @Override
                     public void afterJob(JobExecution jobExecution) {
+//                        throwException();
                         List<StepExecution> failedSteps = jobExecution.getStepExecutions().stream()
                                 .filter(s -> s.getExitStatus().getExitCode().equals(ExitStatus.FAILED.getExitCode()))
                                 .collect(Collectors.toList());
