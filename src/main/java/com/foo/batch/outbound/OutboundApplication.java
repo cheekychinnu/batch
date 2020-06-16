@@ -25,5 +25,8 @@ public class OutboundApplication {
 
         Long executionId = jobOperator.startNextInstance("gear-accounting-pnl-sync");
         System.out.println("Triggered "+executionId);
+
+        Long anotherExecId = jobOperator.startNextInstance("gear-accounting-pnl-sync");
+        System.out.println("Triggered "+anotherExecId);
     }
 }

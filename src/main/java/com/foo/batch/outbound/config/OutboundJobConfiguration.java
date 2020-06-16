@@ -18,6 +18,7 @@ import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.launch.support.SimpleJobLauncher;
 import org.springframework.batch.core.launch.support.SimpleJobOperator;
 import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.core.scope.context.JobSynchronizationManager;
 import org.springframework.batch.item.*;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.BeansException;
@@ -32,6 +33,7 @@ import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -118,6 +120,19 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
                 .<String, String>chunk(CHUNK_SIZE)
                 .reader(reader)
                 .writer(writer)
+                .listener(new StepExecutionListener() {
+                    @Override
+                    public void beforeStep(StepExecution stepExecution) {
+                        JobSynchronizationManager.register(stepExecution.getJobExecution());
+                    }
+
+                    @Override
+                    public ExitStatus afterStep(StepExecution stepExecution) {
+                        JobSynchronizationManager.release();
+                        JobSynchronizationManager.close();
+                        return stepExecution.getExitStatus();
+                    }
+                })
                 .build();
     }
 
@@ -145,21 +160,13 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
                 .end();
     }
 
+    @Autowired
+    private AccountingPnlReader accountingPnlReader;
+
     @Bean
     public Step accountingPnlPortfolioStep() {
         String stepName = ACCOUNTING_PNL_PORTFOLIO + "-step";
-        List<String> input = IntStream.range(1, 6).mapToObj(i -> stepName + i).collect(Collectors.toList());
-        return gearDatasetStepBuilder(stepName, new ItemReader<String>() {
-            private Iterator<String> iterator = input.iterator();
-
-            @Override
-            public String read() throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
-                if (iterator.hasNext()) {
-                    return iterator.next();
-                }
-                return null;
-            }
-        }, items -> LOGGER.info(String.join(",", items)));
+        return gearDatasetStepBuilder(stepName,accountingPnlReader , items -> LOGGER.info(String.join(",", items)));
     }
 
     @Bean
@@ -294,9 +301,10 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
     }
 
     @Bean
-    public Step determineQueryKtRange() {
+    public Step determineQueryKtRange(AccountingPnlParameter accountingPnlParameter) {
         return stepBuilderFactory.get("determine-kt-range")
                 .tasklet((contribution, chunkContext) -> {
+                    accountingPnlParameter.setParameter("something"+new Date());
                     LOGGER.info("determine-kt-range");
                     Thread.sleep(10000);
 //                    throwException();
@@ -319,9 +327,9 @@ public class OutboundJobConfiguration extends DefaultBatchConfigurer implements 
         return jobBuilderFactory
                 .get(jobName)
                 .incrementer(new RunIdIncrementer())
-                .start(determineQueryKtRange()).on("COMPLETED").to(etlFlow)
-                .from(determineQueryKtRange()).on("FAILED").fail()
-                .from(determineQueryKtRange()).on("NOOP").end()
+                .start(determineQueryKtRange(null)).on("COMPLETED").to(etlFlow)
+                .from(determineQueryKtRange(null)).on("FAILED").fail()
+                .from(determineQueryKtRange(null)).on("NOOP").end()
                 .from(etlFlow).on("COMPLETED").to(updateCommonTablesForAccountingPnlFlow())
                 .from(etlFlow).on("FAILED").to(rollbackGearChanges())
                 .end()
